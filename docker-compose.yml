@@ -14,6 +14,7 @@ services:
       - drupal-net
     volumes:
       - db_data:/var/lib/mysql
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
       interval: 5s
@@ -36,6 +37,7 @@ services:
       - drupal_profiles:/var/www/html/profiles
       - drupal_themes:/var/www/html/themes
       - drupal_sites:/var/www/html/sites
+      - ./settings.php:/var/www/html/sites/default/settings.php:ro
 
 networks:
   drupal-net:
