@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+  db:
+    image: mysql:latest
+    container_name: drupal-db
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: my-secret-pw
+      MYSQL_DATABASE: drupal
+      MYSQL_USER: drupaluser
+      MYSQL_PASSWORD: drupalpass
+    ports:
+      - "3306:3306"
+    networks:
+      - drupal-net
+    volumes:
+      - db_data:/var/lib/mysql
+
+  drupal:
+    image: drupal:latest
+    container_name: drupal-web
+    restart: always
+    ports:
+      - "8080:80"
+    depends_on:
+      - db
+    networks:
+      - drupal-net
+    volumes:
+      - drupal_modules:/var/www/html/modules
+      - drupal_profiles:/var/www/html/profiles
+      - drupal_themes:/var/www/html/themes
+      - drupal_sites:/var/www/html/sites
+
+networks:
+  drupal-net:
+    driver: bridge
+
+volumes:
+  db_data:
+  drupal_modules:
+  drupal_profiles:
+  drupal_themes:
+  drupal_sites:
