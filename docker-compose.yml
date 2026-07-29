@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   db:
     image: mysql:latest
@@ -16,6 +14,7 @@ services:
       - drupal-net
     volumes:
       - db_data:/var/lib/mysql
+      - ./init-db:/docker-entrypoint-initdb.d
 
   drupal:
     image: drupal:latest
@@ -31,7 +30,7 @@ services:
       - drupal_modules:/var/www/html/modules
       - drupal_profiles:/var/www/html/profiles
       - drupal_themes:/var/www/html/themes
-      - drupal_sites:/var/www/html/sites
+      - ./sites:/var/www/html/sites
 
 networks:
   drupal-net:
@@ -42,4 +41,3 @@ volumes:
   drupal_modules:
   drupal_profiles:
   drupal_themes:
-  drupal_sites:
