@@ -14,6 +14,11 @@ services:
       - drupal-net
     volumes:
       - db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   drupal:
     image: drupal:latest
@@ -22,7 +27,8 @@ services:
     ports:
       - "8080:80"
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     networks:
       - drupal-net
     volumes:
