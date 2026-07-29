@@ -14,6 +14,7 @@ services:
       - drupal-net
     volumes:
       - db_data:/var/lib/mysql
+      - ./init-db:/docker-entrypoint-initdb.d
 
   drupal:
     image: drupal:latest
