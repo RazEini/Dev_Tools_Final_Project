@@ -23,16 +23,35 @@ VOLUMES=("drupal_modules" "drupal_profiles" "drupal_themes" "drupal_sites")
 
 # ---- קביעת תיקיית הגיבוי ----
 if [ -n "$1" ]; then
-  BACKUP_DIR="$1"
+  if [[ "$1" == *.tar.gz || "$1" == *.tgz ]]; then
+    BACKUP_ARCHIVE="$1"
+    if [ ! -f "${BACKUP_ARCHIVE}" ]; then
+      echo "❌ לא נמצא קובץ ארכיון גיבוי: ${BACKUP_ARCHIVE}"
+      exit 1
+    fi
+
+    TMP_DIR=$(mktemp -d)
+    trap 'rm -rf "${TMP_DIR}"' EXIT
+
+    echo "==> מחלץ קובץ גיבוי זמני..."
+    tar xzf "${BACKUP_ARCHIVE}" -C "${TMP_DIR}"
+    BACKUP_DIR=$(find "${TMP_DIR}" -maxdepth 1 -mindepth 1 -type d | head -1)
+    if [ -z "${BACKUP_DIR}" ]; then
+      echo "❌ הארכיון אינו מכיל תיקיית גיבוי תקינה."
+      exit 1
+    fi
+  else
+    BACKUP_DIR="$1"
+  fi
 else
   BACKUP_DIR=$(ls -td ./backups/backup_*/ 2>/dev/null | head -1)
   if [ -z "${BACKUP_DIR}" ]; then
-    echo "❌ לא נמצאה תיקיית גיבוי. שימוש: ./restore.sh <path-to-backup-dir>"
+    echo "❌ לא נמצאה תיקיית גיבוי. שימוש: ./restore.sh <path-to-backup-dir> או ./restore.sh <backup-archive.tar.gz>"
     exit 1
   fi
 fi
 
-BACKUP_FILE="${BACKUP_DIR}/my-drupal.backup.sql.gz"
+BACKUP_FILE="${BACKUP_DIR}/drupal_db_backup.sql.gz"
 if [ ! -f "${BACKUP_FILE}" ]; then
   echo "❌ קובץ גיבוי לא נמצא: ${BACKUP_FILE}"
   exit 1
@@ -70,9 +89,11 @@ until docker exec "${DB_CONTAINER}" mysqladmin ping -h localhost -uroot -p"${DB_
 done
 echo "✅ DB מוכן."
 
-# ---- שלב 3: שחזור בסיס הנתונים (הדאמפ מכיל CREATE DATABASE, לכן מספיק לייבא ישירות) ----
+echo "==> מנסה ליצור את בסיס הנתונים אם הוא לא קיים..."
+docker exec "${DB_CONTAINER}" sh -c "exec mysqladmin -uroot -p${DB_ROOT_PASSWORD} create ${DB_NAME}" >/dev/null 2>&1 || true
+
 echo "==> משחזר את בסיס הנתונים..."
-gunzip < "${BACKUP_FILE}" | docker exec -i "${DB_CONTAINER}" sh -c "exec mysql -uroot -p${DB_ROOT_PASSWORD} --force"
+gunzip < "${BACKUP_FILE}" | docker exec -i "${DB_CONTAINER}" sh -c "exec mysql -h 127.0.0.1 -u${DB_USER} -p${DB_PASS} --force ${DB_NAME}"
 echo "✅ בסיס הנתונים שוחזר."
 
 # ---- שלב 4: עצירת drupal לפני שחזור קבצים ----
@@ -109,6 +130,9 @@ else
     -v drupal_sites:/var/www/html/sites \
     "${DRUPAL_IMAGE}"
 fi
+
+echo "==> מוודא ש-Drupal רץ ו/או מתחיל מחדש..."
+docker restart "${DRUPAL_CONTAINER}" >/dev/null 2>&1 || true
 
 echo ""
 echo "=============================================="

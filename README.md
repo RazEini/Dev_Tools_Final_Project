@@ -103,6 +103,7 @@ chmod +x setup.sh backup.sh restore.sh cleanup.sh
 
 ```bash
 ./restore.sh backups/backup_<TIMESTAMP>
+```
 
 אם לא מציינים תיקיית גיבוי ספציפית, הסקריפט משתמש אוטומטית בגיבוי העדכני ביותר בתיקיית `backups/`.
 
@@ -126,17 +127,29 @@ http://localhost:8080
 ./backup.sh
 ```
 
-**אם רוצים לבצע גיבוי ידני של MySQL בלבד**, צריך להתקין את כלי ה־MySQL client במערכת המקומית (Linux):
+אם רוצים ליצור קובץ SQL ישיר ללא דחיסה, אפשר להריץ ישירות:
+
+```bash
+docker exec drupal-db sh -c "exec mysqldump --all-databases -uroot -pmy-secret-pw" > backups/my-drupal.backup.sql
+```
+
+**אם רוצים לבצע גיבוי ידני של MySQL בלבד**, צריך להתקין את כלי הגיבוי `mysqldump` כחלק מ־MySQL client במערכת המקומית (Linux):
 
 ```bash
 sudo apt update
 sudo apt install mysql-client-core-8.0
 ```
 
-ואז להריץ:
+לאחר התקנת הכלי, הרץ:
 
 ```bash
 docker exec drupal-db sh -c "exec mysqldump --all-databases -uroot -pmy-secret-pw" | gzip > backups/my-drupal.backup.sql.gz
+```
+
+או אם רוצים קובץ SQL לא דחוס:
+
+```bash
+docker exec drupal-db sh -c "exec mysqldump --all-databases -uroot -pmy-secret-pw" > backups/my-drupal.backup.sql
 ```
 
 נוצרת תיקייה חדשה בתוך `backups/` עם קובץ dump של בסיס הנתונים וכל קבצי ה-volumes. יש להעלות אותה ל-Git:

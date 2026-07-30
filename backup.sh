@@ -5,6 +5,7 @@
 set -e
 
 DB_CONTAINER="drupal-db"
+DB_NAME="drupal"
 MYSQL_ROOT_PASSWORD="my-secret-pw"
 
 VOLUMES=("drupal_modules" "drupal_profiles" "drupal_themes" "drupal_sites")
@@ -28,8 +29,8 @@ fi
 # ---- גיבוי בסיס הנתונים (MySQL) ----
 echo "==> מגבה את בסיס הנתונים (mysqldump --all-databases)..."
 docker exec "${DB_CONTAINER}" sh -c "exec mysqldump --all-databases -uroot -p${MYSQL_ROOT_PASSWORD}" \
-  | gzip > "${BACKUP_DIR}/my-drupal.backup.sql.gz"
-echo "✅ גיבוי DB נשמר ב: ${BACKUP_DIR}/my-drupal.backup.sql.gz"
+  | gzip > "${BACKUP_DIR}/drupal_db_backup.sql.gz"
+echo "✅ גיבוי DB נשמר ב: ${BACKUP_DIR}/drupal_db_backup.sql.gz"
 
 # ---- גיבוי ה-Volumes של Drupal ----
 echo "==> מגבה את קבצי ה-Volumes..."
