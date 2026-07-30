@@ -110,6 +110,19 @@ chmod +x setup.sh backup.sh restore.sh cleanup.sh
 הסקריפט יאתר אוטומטית את הגיבוי העדכני ביותר בתיקיית `backups/` וישחזר אותו.  
 לחלופין, ניתן להעביר נתיב ספציפי: `./restore.sh backups/backup_<TIMESTAMP>`
 
+**במידה ורוצים לבצע שחזור ידני של MySQL בלבד (לפי דרישות חלק 5 במטלה):**
+
+```bash
+# 1. יצירת בסיס הנתונים במידה ואינו קיים
+docker exec drupal-db sh -c "exec mysqladmin -uroot -pmy-secret-pw create drupal"
+
+# 2. פרישת הגיבוי הדחוס והזרקתו לבסיס הנתונים
+gunzip < backups/backup_<TIMESTAMP>/drupal_db_backup.sql.gz | docker exec -i drupal-db sh -c "exec mysql -h 127.0.0.1 -uroot -pmy-secret-pw --force drupal"
+
+# 3. הפעלה מחדש של קונטיינר Drupal להחלת השינויים
+docker restart drupal-web
+```
+
 ### 4. כניסה לאתר
 
 פותחים דפדפן בכתובת:
@@ -130,7 +143,7 @@ http://localhost:8080
 ./backup.sh
 ```
 
-**במידה ורוצים לבצע גיבוי ידני של MySQL בלבד (לפי דרישות המטלה):**
+**במידה ורוצים לבצע גיבוי ידני של MySQL בלבד (לפי דרישות חלק 4 במטלה):**
 
 ```bash
 sudo apt update
