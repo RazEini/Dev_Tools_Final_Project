@@ -41,10 +41,11 @@ for vol_suffix in "${VOLUME_SUFFIXES[@]}"; do
 
   if [ -n "${ACTUAL_VOL}" ]; then
     echo "    - Found volume: ${ACTUAL_VOL}"
+    # Using local drupal:latest image so no new image download is needed
     docker run --rm \
       -v "${ACTUAL_VOL}":/data \
       -v "$(pwd)/${BACKUP_DIR}/volumes":/backup \
-      alpine tar czf "/backup/${vol_suffix}.tar.gz" -C /data .
+      drupal:latest tar czf "/backup/${vol_suffix}.tar.gz" -C /data .
   else
     echo "    ⚠️  Volume matching '${vol_suffix}' not found, skipping."
   fi
