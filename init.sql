@@ -1,2 +1,0 @@
--- Empty init file; Drupal will set up its schema on first run
--- If you need to pre-populate data, add your SQL statements here
