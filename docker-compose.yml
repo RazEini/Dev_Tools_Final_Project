@@ -6,7 +6,7 @@ services:
     environment:
       MYSQL_ROOT_PASSWORD: my-secret-pw
       MYSQL_DATABASE: drupal
-      MYSQL_USER: drupaluser
+      MYSQL_USER: drupaluserI
       MYSQL_PASSWORD: drupalpass
     ports:
       - "3306:3306"
