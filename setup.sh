@@ -1,11 +1,11 @@
 #!/bin/bash
 # ==============================================================================
-# setup.sh - הקמת תשתית Docker מלאה עבור אתר Drupal + MySQL
-# מריץ: network, שני containers, ומתקין את Drupal אוטומטית (drush)
+# setup.sh - Complete Docker infrastructure setup for Drupal + MySQL
+# Runs: network, two containers, and automatically installs Drupal via Drush
 # ==============================================================================
 set -e
 
-# ---- משתני סביבה ----
+# ---- Environment Variables ----
 NETWORK_NAME="drupal-net"
 
 DB_CONTAINER="drupal-db"
@@ -19,27 +19,27 @@ DRUPAL_CONTAINER="drupal-web"
 DRUPAL_IMAGE="drupal:latest"
 DRUPAL_PORT="8080"
 
-SITE_NAME="האתר של רז עייני, אריאל לוין ורז יעקובי"
+SITE_NAME="Raz Eyni, Ariel Levin and Raz Yacobi's Site"
 ADMIN_USER="demoadmin"
 ADMIN_PASS="secretpass"
-SITE_LANG="he"   # he = עברית, en = אנגלית
+SITE_LANG="en"   # en = English, he = Hebrew
 
 echo "=============================================="
-echo " שלב 1: יצירת רשת Docker פנימית"
+echo " Step 1: Creating internal Docker network"
 echo "=============================================="
 if ! docker network inspect "${NETWORK_NAME}" >/dev/null 2>&1; then
   docker network create "${NETWORK_NAME}"
-  echo "✅ נוצרה רשת: ${NETWORK_NAME}"
+  echo "✅ Network created: ${NETWORK_NAME}"
 else
-  echo "ℹ️  הרשת ${NETWORK_NAME} כבר קיימת, ממשיכים."
+  echo "ℹ️  Network ${NETWORK_NAME} already exists, continuing."
 fi
 
 echo ""
 echo "=============================================="
-echo " שלב 2: הרצת קונטיינר בסיס הנתונים (MySQL)"
+echo " Step 2: Running Database container (MySQL)"
 echo "=============================================="
 if [ "$(docker ps -aq -f name=^${DB_CONTAINER}$)" ]; then
-  echo "ℹ️  קונטיינר ${DB_CONTAINER} כבר קיים, מוודא שהוא רץ..."
+  echo "ℹ️  Container ${DB_CONTAINER} already exists, ensuring it is running..."
   docker start "${DB_CONTAINER}" >/dev/null 2>&1 || true
 else
   docker run -d \
@@ -50,25 +50,24 @@ else
     -e MYSQL_DATABASE="${DB_NAME}" \
     -e MYSQL_USER="${DB_USER}" \
     -e MYSQL_PASSWORD="${DB_PASS}" \
-    -p 3306:3306 \
     -v db_data:/var/lib/mysql \
     "${DB_IMAGE}"
-  echo "✅ קונטיינר ${DB_CONTAINER} עלה."
+  echo "✅ Container ${DB_CONTAINER} is up."
 fi
 
-echo "==> ממתין שה-DB יהיה זמין..."
+echo "==> Waiting for Database to become ready..."
 until docker exec "${DB_CONTAINER}" mysqladmin ping -h localhost -uroot -p"${DB_ROOT_PASSWORD}" --silent >/dev/null 2>&1; do
-  echo "    ...עדיין לא מוכן"
+  echo "    ...Still waiting"
   sleep 3
 done
-echo "✅ בסיס הנתונים מוכן."
+echo "✅ Database is ready."
 
 echo ""
 echo "=============================================="
-echo " שלב 3: הרצת קונטיינר Drupal"
+echo " Step 3: Running Drupal container"
 echo "=============================================="
 if [ "$(docker ps -aq -f name=^${DRUPAL_CONTAINER}$)" ]; then
-  echo "ℹ️  קונטיינר ${DRUPAL_CONTAINER} כבר קיים, מוודא שהוא רץ..."
+  echo "ℹ️  Container ${DRUPAL_CONTAINER} already exists, ensuring it is running..."
   docker start "${DRUPAL_CONTAINER}" >/dev/null 2>&1 || true
 else
   docker run -d \
@@ -81,24 +80,31 @@ else
     -v drupal_themes:/var/www/html/themes \
     -v drupal_sites:/var/www/html/sites \
     "${DRUPAL_IMAGE}"
-  echo "✅ קונטיינר ${DRUPAL_CONTAINER} עלה."
+  echo "✅ Container ${DRUPAL_CONTAINER} is up."
 fi
 
-echo "==> ממתין שקבצי Drupal יהיו זמינים בתוך הקונטיינר..."
-until docker exec "${DRUPAL_CONTAINER}" test -f /opt/drupal/vendor/bin/drush >/dev/null 2>&1; do
-  echo "    ...עדיין טוען"
+echo "==> Ensuring Apache/PHP service inside container is ready..."
+until docker exec "${DRUPAL_CONTAINER}" php -v >/dev/null 2>&1; do
+  echo "    ...Still loading"
   sleep 3
 done
-echo "✅ Drupal מוכן."
+
+# Install Drush if it does not exist in the official image
+if ! docker exec "${DRUPAL_CONTAINER}" test -f /opt/drupal/vendor/bin/drush 2>/dev/null; then
+  echo "==> Installing Drush inside container..."
+  docker exec "${DRUPAL_CONTAINER}" composer require drush/drush --quiet || true
+fi
+
+echo "✅ Drupal container is ready."
 
 echo ""
 echo "=============================================="
-echo " שלב 4: התקנת Drupal אוטומטית (drush site-install)"
+echo " Step 4: Automatic Drupal Installation (drush site-install)"
 echo "=============================================="
 
-# בדיקה אם האתר כבר מותקן (settings.php קיים ומאותחל)
+# Check if Drupal is already installed
 if docker exec "${DRUPAL_CONTAINER}" test -f /opt/drupal/web/sites/default/settings.php 2>/dev/null; then
-  echo "ℹ️  נראה שהאתר כבר מותקן, מדלג על ההתקנה."
+  echo "ℹ️  Site appears to be already installed, skipping installation."
 else
   docker exec "${DRUPAL_CONTAINER}" /opt/drupal/vendor/bin/drush site-install standard \
     --db-url="mysql://${DB_USER}:${DB_PASS}@${DB_CONTAINER}:3306/${DB_NAME}" \
@@ -108,12 +114,12 @@ else
     --locale="${SITE_LANG}" \
     -y
 
-  echo "✅ Drupal הותקן בהצלחה."
+  echo "✅ Drupal installed successfully."
 fi
 
 echo ""
 echo "=============================================="
-echo " ✅ ההתקנה הושלמה!"
-echo " גלשו אל: http://localhost:${DRUPAL_PORT}"
-echo " משתמש מנהל: ${ADMIN_USER} / ${ADMIN_PASS}"
+echo " ✅ Setup completed!"
+echo " Browse to: http://localhost:${DRUPAL_PORT}"
+echo " Admin credentials: ${ADMIN_USER} / ${ADMIN_PASS}"
 echo "=============================================="
