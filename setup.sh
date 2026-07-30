@@ -19,7 +19,7 @@ DRUPAL_CONTAINER="drupal-web"
 DRUPAL_IMAGE="drupal:latest"
 DRUPAL_PORT="8080"
 
-SITE_NAME="האתר של Raz"
+SITE_NAME="האתר של רז עייני, אריאל לוין ורז יעקובי"
 ADMIN_USER="demoadmin"
 ADMIN_PASS="secretpass"
 SITE_LANG="he"   # he = עברית, en = אנגלית
