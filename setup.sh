@@ -89,7 +89,7 @@ until docker exec "${DRUPAL_CONTAINER}" php -v >/dev/null 2>&1; do
   sleep 3
 done
 
-# Install Drush if it does not exist in the official image
+# Install Drush if it does not exist in the container
 if ! docker exec "${DRUPAL_CONTAINER}" test -f /opt/drupal/vendor/bin/drush 2>/dev/null; then
   echo "==> Installing Drush inside container..."
   docker exec "${DRUPAL_CONTAINER}" composer require drush/drush --quiet || true

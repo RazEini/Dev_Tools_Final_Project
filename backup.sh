@@ -8,7 +8,8 @@ DB_CONTAINER="drupal-db"
 DB_NAME="drupal"
 MYSQL_ROOT_PASSWORD="my-secret-pw"
 
-VOLUMES=("dev_tools_final_project_drupal_modules" "dev_tools_final_project_drupal_profiles" "dev_tools_final_project_drupal_themes" "dev_tools_final_project_drupal_sites")
+# Base volume suffixes
+VOLUME_SUFFIXES=("drupal_modules" "drupal_profiles" "drupal_themes" "drupal_sites")
 
 BACKUP_ROOT="./backups"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
@@ -27,28 +28,26 @@ if [ ! "$(docker ps -q -f name=^${DB_CONTAINER}$)" ]; then
 fi
 
 # ---- Backup the database (MySQL) ----
-echo "==> Backing up the database (mysqldump --all-databases)..."
-docker exec "${DB_CONTAINER}" sh -c "exec mysqldump --all-databases -uroot -p${MYSQL_ROOT_PASSWORD}" \
+echo "==> Backing up the database (${DB_NAME})..."
+docker exec "${DB_CONTAINER}" sh -c "exec mysqldump -uroot -p${MYSQL_ROOT_PASSWORD} --databases ${DB_NAME}" \
   | gzip > "${BACKUP_DIR}/drupal_db_backup.sql.gz"
 echo "✅ DB backup saved to: ${BACKUP_DIR}/drupal_db_backup.sql.gz"
 
 # ---- Backup the Drupal volumes ----
 echo "==> Backing up volumes..."
-for vol in "${VOLUMES[@]}"; do
-  if docker volume inspect "${vol}" >/dev/null 2>&1; then
-    echo "    - ${vol}"
+for vol_suffix in "${VOLUME_SUFFIXES[@]}"; do
+  # Dynamically resolve full volume name (handles prefixes automatically)
+  ACTUAL_VOL=$(docker volume ls --format '{{.Name}}' | grep -E "(^|_)${vol_suffix}$" | head -n 1)
+
+  if [ -n "${ACTUAL_VOL}" ]; then
+    echo "    - Found volume: ${ACTUAL_VOL}"
     docker run --rm \
-      -v "${vol}":/data \
+      -v "${ACTUAL_VOL}":/data \
       -v "$(pwd)/${BACKUP_DIR}/volumes":/backup \
-      alpine tar czf "/backup/${vol}.tar.gz" -C /data .
+      alpine tar czf "/backup/${vol_suffix}.tar.gz" -C /data .
   else
-    echo "    ⚠️  Volume ${vol} not found, skipping."
+    echo "    ⚠️  Volume matching '${vol_suffix}' not found, skipping."
   fi
 done
 
 echo "✅ Backup complete: ${BACKUP_DIR}"
-echo ""
-echo "To save the backup in Git, run:"
-echo "  git add ${BACKUP_DIR}"
-echo "  git commit -m \"backup ${TIMESTAMP}\""
-echo "  git push"
