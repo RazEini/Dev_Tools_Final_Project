@@ -1,6 +1,6 @@
 #!/bin/bash
 # ==============================================================================
-# cleanup.sh - ניקוי מלא של כל מה שנוצר עבור הפרויקט (containers, images, volumes, network)
+# cleanup.sh - Complete cleanup of project resources (containers, volumes, network, images)
 # ==============================================================================
 set -e
 
@@ -12,30 +12,41 @@ DRUPAL_IMAGE="drupal:latest"
 VOLUMES=("db_data" "drupal_modules" "drupal_profiles" "drupal_themes" "drupal_sites")
 
 echo "=============================================="
-echo " מנקה את כל משאבי הפרויקט"
+echo " Cleaning up all project resources"
 echo "=============================================="
 
-read -p "⚠️  פעולה זו תמחק את כל הנתונים שלא גובו. להמשיך? (y/N): " confirm
+read -p "⚠️  This action will permanently delete all unbacked data. Continue? (y/N): " confirm
 if [[ "${confirm}" != "y" && "${confirm}" != "Y" ]]; then
-  echo "בוטל."
+  echo "Cancelled."
   exit 0
 fi
 
-echo "==> מוחק קונטיינרים..."
-docker rm -f "${DRUPAL_CONTAINER}" >/dev/null 2>&1 && echo "    - ${DRUPAL_CONTAINER} נמחק" || echo "    - ${DRUPAL_CONTAINER} לא נמצא"
-docker rm -f "${DB_CONTAINER}" >/dev/null 2>&1 && echo "    - ${DB_CONTAINER} נמחק" || echo "    - ${DB_CONTAINER} לא נמצא"
+echo "==> Removing containers..."
+docker rm -f "${DRUPAL_CONTAINER}" >/dev/null 2>&1 && echo "    - ${DRUPAL_CONTAINER} removed" || echo "    - ${DRUPAL_CONTAINER} not found"
+docker rm -f "${DB_CONTAINER}" >/dev/null 2>&1 && echo "    - ${DB_CONTAINER} removed" || echo "    - ${DB_CONTAINER} not found"
 
-echo "==> מוחק Volumes..."
-for vol in "${VOLUMES[@]}"; do
-  docker volume rm "${vol}" >/dev/null 2>&1 && echo "    - ${vol} נמחק" || echo "    - ${vol} לא נמצא"
+echo "==> Removing volumes..."
+for vol_suffix in "${VOLUMES[@]}"; do
+  # Find exact volume name matching the suffix or prefixed name
+  MATCHING_VOLS=$(docker volume ls --format '{{.Name}}' | grep -E "(^|_)${vol_suffix}$" || true)
+  
+  if [ -n "${MATCHING_VOLS}" ]; then
+    for vol in ${MATCHING_VOLS}; do
+      docker volume rm "${vol}" >/dev/null 2>&1 && echo "    - Volume ${vol} removed" || echo "    - Failed to remove volume ${vol}"
+    done
+  else
+    echo "    - Volume ${vol_suffix} not found"
+  fi
 done
 
-echo "==> מוחק רשת..."
-docker network rm "${NETWORK_NAME}" >/dev/null 2>&1 && echo "    - ${NETWORK_NAME} נמחקה" || echo "    - ${NETWORK_NAME} לא נמצאה"
+echo "==> Removing network..."
+docker network rm "${NETWORK_NAME}" >/dev/null 2>&1 && echo "    - Network ${NETWORK_NAME} removed" || echo "    - Network ${NETWORK_NAME} not found"
 
-echo "==> מוחק Images..."
-docker rmi "${DRUPAL_IMAGE}" >/dev/null 2>&1 && echo "    - ${DRUPAL_IMAGE} נמחק" || echo "    - ${DRUPAL_IMAGE} לא נמצא"
-docker rmi "${DB_IMAGE}" >/dev/null 2>&1 && echo "    - ${DB_IMAGE} נמחק" || echo "    - ${DB_IMAGE} לא נמצא"
+echo "==> Removing Docker images..."
+docker rmi "${DRUPAL_IMAGE}" >/dev/null 2>&1 && echo "    - Image ${DRUPAL_IMAGE} removed" || echo "    - Image ${DRUPAL_IMAGE} not found"
+docker rmi "${DB_IMAGE}" >/dev/null 2>&1 && echo "    - Image ${DB_IMAGE} removed" || echo "    - Image ${DB_IMAGE} not found"
 
 echo ""
-echo "✅ הניקוי הושלם. הסביבה חזרה למצב שהייתה לפני ההתקנה."
+echo "=============================================="
+echo " ✅ Cleanup complete! Environment restored to initial state."
+echo "=============================================="

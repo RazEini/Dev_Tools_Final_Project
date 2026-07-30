@@ -1,8 +1,8 @@
 #!/bin/bash
 # ==============================================================================
-# restore.sh - שחזור מלא של האתר (בסיס נתונים + volumes) מתוך גיבוי
-# שימוש: ./restore.sh <path-to-backup-dir>   (לדוגמה: ./backups/backup_20260730_120000)
-# אם לא מציינים נתיב - הסקריפט ישתמש בגיבוי העדכני ביותר בתיקיית backups/
+# restore.sh - Full Drupal restoration (Database + Volumes) from a backup
+# Usage: ./restore.sh <path-to-backup-dir>   (e.g., ./backups/backup_20260730_120000)
+# If no path is provided, it automatically uses the latest backup in ./backups/
 # ==============================================================================
 set -e
 
@@ -21,50 +21,57 @@ DRUPAL_PORT="8080"
 
 VOLUMES=("drupal_modules" "drupal_profiles" "drupal_themes" "drupal_sites")
 
-# ---- קביעת תיקיית הגיבוי ----
+# ---- Step 0: Resolve Backup Directory ----
 if [ -n "$1" ]; then
   if [[ "$1" == *.tar.gz || "$1" == *.tgz ]]; then
     BACKUP_ARCHIVE="$1"
     if [ ! -f "${BACKUP_ARCHIVE}" ]; then
-      echo "❌ לא נמצא קובץ ארכיון גיבוי: ${BACKUP_ARCHIVE}"
+      echo "❌ Backup archive not found: ${BACKUP_ARCHIVE}"
       exit 1
     fi
 
     TMP_DIR=$(mktemp -d)
     trap 'rm -rf "${TMP_DIR}"' EXIT
 
-    echo "==> מחלץ קובץ גיבוי זמני..."
+    echo "==> Extracting temporary backup archive..."
     tar xzf "${BACKUP_ARCHIVE}" -C "${TMP_DIR}"
     BACKUP_DIR=$(find "${TMP_DIR}" -maxdepth 1 -mindepth 1 -type d | head -1)
     if [ -z "${BACKUP_DIR}" ]; then
-      echo "❌ הארכיון אינו מכיל תיקיית גיבוי תקינה."
+      echo "❌ Archive does not contain a valid backup directory."
       exit 1
     fi
   else
     BACKUP_DIR="$1"
   fi
 else
-  BACKUP_DIR=$(ls -td ./backups/backup_*/ 2>/dev/null | head -1)
+  # Clean auto-discovery using find (avoids trailing slashes issues)
+  BACKUP_DIR=$(find ./backups -maxdepth 1 -mindepth 1 -type d -name "backup_*" 2>/dev/null | sort -r | head -n 1)
   if [ -z "${BACKUP_DIR}" ]; then
-    echo "❌ לא נמצאה תיקיית גיבוי. שימוש: ./restore.sh <path-to-backup-dir> או ./restore.sh <backup-archive.tar.gz>"
+    echo "❌ No backup directory found. Usage: ./restore.sh <path-to-backup-dir> or ./restore.sh <backup-archive.tar.gz>"
     exit 1
   fi
 fi
 
+# Strip any trailing slash if present
+BACKUP_DIR="${BACKUP_DIR%/}"
+
 BACKUP_FILE="${BACKUP_DIR}/drupal_db_backup.sql.gz"
 if [ ! -f "${BACKUP_FILE}" ]; then
-  echo "❌ קובץ גיבוי לא נמצא: ${BACKUP_FILE}"
+  echo "❌ Database backup file not found: ${BACKUP_FILE}"
   exit 1
 fi
 
+# Resolve absolute path to backup folder for reliable volume mounts
+ABS_BACKUP_DIR=$(cd "${BACKUP_DIR}" && pwd)
+
 echo "=============================================="
-echo " משחזר מתוך: ${BACKUP_DIR}"
+echo " Restoring from: ${BACKUP_DIR}"
 echo "=============================================="
 
-# ---- שלב 1: רשת ----
+# ---- Step 1: Ensure Docker Network Exists ----
 docker network inspect "${NETWORK_NAME}" >/dev/null 2>&1 || docker network create "${NETWORK_NAME}"
 
-# ---- שלב 2: העלאת בסיס הנתונים ----
+# ---- Step 2: Ensure Database Container is Running ----
 if [ ! "$(docker ps -q -f name=^${DB_CONTAINER}$)" ]; then
   if [ "$(docker ps -aq -f name=^${DB_CONTAINER}$)" ]; then
     docker start "${DB_CONTAINER}"
@@ -83,39 +90,48 @@ if [ ! "$(docker ps -q -f name=^${DB_CONTAINER}$)" ]; then
   fi
 fi
 
-echo "==> ממתין ל-DB..."
+echo "==> Waiting for Database container..."
 until docker exec "${DB_CONTAINER}" mysqladmin ping -h localhost -uroot -p"${DB_ROOT_PASSWORD}" --silent >/dev/null 2>&1; do
   sleep 3
 done
-echo "✅ DB מוכן."
+echo "✅ Database is ready."
 
-echo "==> מנסה ליצור את בסיס הנתונים אם הוא לא קיים..."
+echo "==> Creating database if it does not exist..."
 docker exec "${DB_CONTAINER}" sh -c "exec mysqladmin -uroot -p${DB_ROOT_PASSWORD} create ${DB_NAME}" >/dev/null 2>&1 || true
 
-echo "==> משחזר את בסיס הנתונים..."
+# ---- Step 3: Restore Database Dump ----
+echo "==> Restoring MySQL database..."
 gunzip < "${BACKUP_FILE}" | docker exec -i "${DB_CONTAINER}" sh -c "exec mysql -h 127.0.0.1 -u${DB_USER} -p${DB_PASS} --force ${DB_NAME}"
-echo "✅ בסיס הנתונים שוחזר."
+echo "✅ Database restored."
 
-# ---- שלב 4: עצירת drupal לפני שחזור קבצים ----
+# ---- Step 4: Stop Drupal Web Container Before File Restore ----
 docker stop "${DRUPAL_CONTAINER}" >/dev/null 2>&1 || true
 
-# ---- שלב 5: שחזור ה-Volumes ----
-echo "==> משחזר קבצי Volumes..."
-for vol in "${VOLUMES[@]}"; do
-  vol_backup="${BACKUP_DIR}/volumes/${vol}.tar.gz"
+# ---- Step 5: Restore Volumes ----
+echo "==> Restoring Volume files..."
+for vol_suffix in "${VOLUMES[@]}"; do
+  vol_backup="${BACKUP_DIR}/volumes/${vol_suffix}.tar.gz"
+  
+  # Dynamic resolution to catch directory/compose prefixes automatically
+  ACTUAL_VOL=$(docker volume ls --format '{{.Name}}' | grep -E "(^|_)${vol_suffix}$" | head -n 1)
+  
+  if [ -z "${ACTUAL_VOL}" ]; then
+    ACTUAL_VOL="${vol_suffix}"
+    docker volume create "${ACTUAL_VOL}" >/dev/null
+  fi
+
   if [ -f "${vol_backup}" ]; then
-    echo "    - ${vol}"
-    docker volume create "${vol}" >/dev/null
+    echo "    - Restoring to: ${ACTUAL_VOL}"
     docker run --rm \
-      -v "${vol}":/data \
-      -v "$(pwd)/${BACKUP_DIR}/volumes":/backup \
-      alpine sh -c "rm -rf /data/* /data/..?* /data/.[!.]* 2>/dev/null; tar xzf /backup/${vol}.tar.gz -C /data"
+      -v "${ACTUAL_VOL}":/data \
+      -v "${ABS_BACKUP_DIR}/volumes":/backup \
+      drupal:latest sh -c "rm -rf /data/* /data/..?* /data/.[!.]* 2>/dev/null; tar xzf /backup/${vol_suffix}.tar.gz -C /data"
   else
-    echo "    ⚠️  אין גיבוי עבור ${vol}, מדלג."
+    echo "    ⚠️  No backup archive found for ${vol_suffix}, skipping."
   fi
 done
 
-# ---- שלב 6: הרצת / הפעלת drupal מחדש ----
+# ---- Step 6: Start/Restart Drupal Container ----
 if [ "$(docker ps -aq -f name=^${DRUPAL_CONTAINER}$)" ]; then
   docker start "${DRUPAL_CONTAINER}"
 else
@@ -131,12 +147,13 @@ else
     "${DRUPAL_IMAGE}"
 fi
 
-echo "==> מוודא ש-Drupal רץ ו/או מתחיל מחדש..."
+echo "==> Ensuring Drupal is running and rebuilding cache..."
 docker restart "${DRUPAL_CONTAINER}" >/dev/null 2>&1 || true
+docker exec "${DRUPAL_CONTAINER}" drush cr >/dev/null 2>&1 || true
 
 echo ""
 echo "=============================================="
-echo " ✅ שחזור הושלם!"
-echo " גלשו אל: http://localhost:${DRUPAL_PORT}"
-echo " התחברו עם אחד מהמשתמשים הקיימים (demoadmin וכו')."
+echo " ✅ Restoration completed successfully!"
+echo " Browse to: http://localhost:${DRUPAL_PORT}"
+echo " Log in with your restored credentials."
 echo "=============================================="
