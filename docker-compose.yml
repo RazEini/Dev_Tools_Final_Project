@@ -1,13 +1,13 @@
 services:
   db:
-    image: mysql:latest
+    image: mysql:8.0
     container_name: drupal-db
     restart: always
     environment:
-      MYSQL_ROOT_PASSWORD: my-secret-pw
-      MYSQL_DATABASE: drupal
-      MYSQL_USER: drupaluser
-      MYSQL_PASSWORD: drupalpass
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
     ports:
       - "3306:3306"
     networks:
@@ -22,7 +22,7 @@ services:
       retries: 10
 
   drupal:
-    image: drupal:latest
+    image: drupal:10-apache
     container_name: drupal-web
     restart: always
     ports:
@@ -37,7 +37,10 @@ services:
       - drupal_profiles:/var/www/html/profiles
       - drupal_themes:/var/www/html/themes
       - drupal_sites:/var/www/html/sites
-      - ./settings.php:/var/www/html/sites/default/settings.php:ro
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
 
 networks:
   drupal-net:
