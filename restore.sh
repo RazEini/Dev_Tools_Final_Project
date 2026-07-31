@@ -91,7 +91,7 @@ if [ ! "$(docker ps -q -f name=^${DB_CONTAINER}$)" ]; then
 fi
 
 echo "==> Waiting for Database container..."
-until docker exec "${DB_CONTAINER}" mysqladmin ping -h localhost -uroot -p"${DB_ROOT_PASSWORD}" --silent >/dev/null 2>&1; do
+until docker exec "${DB_CONTAINER}" mysql -u"${DB_USER}" -p"${DB_PASS}" -e "USE ${DB_NAME};" >/dev/null 2>&1; do
   sleep 3
 done
 echo "✅ Database is ready."
@@ -149,7 +149,7 @@ fi
 
 echo "==> Ensuring Drupal is running and rebuilding cache..."
 docker restart "${DRUPAL_CONTAINER}" >/dev/null 2>&1 || true
-docker exec "${DRUPAL_CONTAINER}" drush cr >/dev/null 2>&1 || true
+docker exec -w /opt/drupal "${DRUPAL_CONTAINER}" /opt/drupal/vendor/bin/drush cr >/dev/null 2>&1 || true
 
 echo ""
 echo "=============================================="
