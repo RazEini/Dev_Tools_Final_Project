@@ -19,7 +19,8 @@ DRUPAL_CONTAINER="drupal-web"
 DRUPAL_IMAGE="drupal:latest"
 DRUPAL_PORT="8080"
 
-SITE_NAME="Raz Eyni, Ariel Levin and Raz Yacobi's Site"
+# Fixed: Removed single quote/apostrophe from site name to prevent CLI quote syntax errors
+SITE_NAME="האתר של רז עייני, אריאל לוין ורז יעקבי"
 ADMIN_USER="demoadmin"
 ADMIN_PASS="secretpass"
 SITE_LANG="en"   # en = English, he = Hebrew
@@ -55,12 +56,13 @@ else
   echo "✅ Container ${DB_CONTAINER} is up."
 fi
 
-echo "==> Waiting for Database to become ready..."
-until docker exec "${DB_CONTAINER}" mysqladmin ping -h localhost -uroot -p"${DB_ROOT_PASSWORD}" --silent >/dev/null 2>&1; do
-  echo "    ...Still waiting"
+echo "==> Waiting for Database and User initialization to complete..."
+# Fixed: Checking specific database access with drupaluser instead of root ping
+until docker exec "${DB_CONTAINER}" mysql -u"${DB_USER}" -p"${DB_PASS}" -e "USE ${DB_NAME};" >/dev/null 2>&1; do
+  echo "    ...Still waiting for MySQL database and user setup"
   sleep 3
 done
-echo "✅ Database is ready."
+echo "✅ Database is fully ready."
 
 echo ""
 echo "=============================================="
@@ -106,7 +108,8 @@ echo "=============================================="
 if docker exec "${DRUPAL_CONTAINER}" test -f /opt/drupal/web/sites/default/settings.php 2>/dev/null; then
   echo "ℹ️  Site appears to be already installed, skipping installation."
 else
-  docker exec "${DRUPAL_CONTAINER}" /opt/drupal/vendor/bin/drush site-install standard \
+  # Fixed: Added working directory parameter (-w /opt/drupal)
+  docker exec -w /opt/drupal "${DRUPAL_CONTAINER}" /opt/drupal/vendor/bin/drush site-install standard \
     --db-url="mysql://${DB_USER}:${DB_PASS}@${DB_CONTAINER}:3306/${DB_NAME}" \
     --site-name="${SITE_NAME}" \
     --account-name="${ADMIN_USER}" \
