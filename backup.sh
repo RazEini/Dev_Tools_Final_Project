@@ -57,6 +57,7 @@ CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "main")
 
 git add "${BACKUP_DIR}"
 git commit -m "Automated backup: ${TIMESTAMP}" || echo "⚠️ Nothing to commit or git commit failed."
+git pull --rebase origin "${CURRENT_BRANCH}" || echo "⚠️ Git pull failed."
 git push origin "${CURRENT_BRANCH}" || echo "⚠️ Git push failed. Ensure SSH/credentials are configured."
 
 echo ""
