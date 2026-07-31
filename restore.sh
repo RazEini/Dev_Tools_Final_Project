@@ -21,6 +21,11 @@ DRUPAL_PORT="8080"
 
 VOLUMES=("drupal_modules" "drupal_profiles" "drupal_themes" "drupal_sites")
 
+# ---- Step 00: Pull Latest Backups from GitHub ----
+echo "==> Fetching latest changes and backups from GitHub..."
+CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "main")
+git pull origin "${CURRENT_BRANCH}" || echo "⚠️ Git pull failed. Proceeding with local files if available."
+
 # ---- Step 0: Resolve Backup Directory ----
 if [ -n "$1" ]; then
   if [[ "$1" == *.tar.gz || "$1" == *.tgz ]]; then
