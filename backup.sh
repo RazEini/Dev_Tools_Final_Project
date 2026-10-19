@@ -8,8 +8,8 @@ DB_CONTAINER="drupal-db"
 DB_NAME="drupal"
 MYSQL_ROOT_PASSWORD="my-secret-pw"
 
-# Base volume suffixes
-VOLUME_SUFFIXES=("drupal_modules" "drupal_profiles" "drupal_themes" "drupal_sites")
+# Exact volume names (as created by setup.sh)
+VOLUMES=("drupal_modules" "drupal_profiles" "drupal_themes" "drupal_sites")
 
 BACKUP_ROOT="./backups"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
@@ -35,20 +35,30 @@ echo "✅ DB backup saved to: ${BACKUP_DIR}/drupal_db_backup.sql.gz"
 
 # ---- Backup the Drupal volumes ----
 echo "==> Backing up volumes..."
-for vol_suffix in "${VOLUME_SUFFIXES[@]}"; do
-  # Dynamically resolve full volume name (handles prefixes automatically)
-  ACTUAL_VOL=$(docker volume ls --format '{{.Name}}' | grep -E "(^|_)${vol_suffix}$" | head -n 1)
-
-  if [ -n "${ACTUAL_VOL}" ]; then
-    echo "    - Found volume: ${ACTUAL_VOL}"
+for vol in "${VOLUMES[@]}"; do
+  if docker volume inspect "${vol}" >/dev/null 2>&1; then
+    echo "    - Found volume: ${vol}"
     # Using local drupal:latest image so no new image download is needed
     docker run --rm \
-      -v "${ACTUAL_VOL}":/data \
+      -v "${vol}":/data \
       -v "$(pwd)/${BACKUP_DIR}/volumes":/backup \
-      drupal:latest tar czf "/backup/${vol_suffix}.tar.gz" -C /data .
+      drupal:latest tar czf "/backup/${vol}.tar.gz" -C /data .
   else
-    echo "    ⚠️  Volume matching '${vol_suffix}' not found, skipping."
+    echo "    ⚠️  Volume '${vol}' not found, skipping."
   fi
+done
+
+# ---- Keep only the latest backup in the repository ----
+# Runs only after the new backup finished successfully (set -e), so a failed
+# backup never deletes the previous good one.
+echo "==> Removing older backups (keeping only ${BACKUP_DIR})..."
+for old_dir in "${BACKUP_ROOT}"/backup_*/; do
+  old_dir="${old_dir%/}"
+  [ -d "${old_dir}" ] || continue
+  [ "${old_dir}" = "${BACKUP_DIR}" ] && continue
+  git rm -r -q -f --ignore-unmatch "${old_dir}" >/dev/null 2>&1 || true
+  rm -rf "${old_dir}"
+  echo "    - removed ${old_dir}"
 done
 
 # ---- Push backup to GitHub ----
