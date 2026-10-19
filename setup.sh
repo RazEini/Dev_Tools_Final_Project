@@ -9,7 +9,7 @@ set -e
 NETWORK_NAME="drupal-net"
 
 DB_CONTAINER="drupal-db"
-DB_IMAGE="mysql:8.0"
+DB_IMAGE="mysql:latest"
 DB_ROOT_PASSWORD="my-secret-pw"
 DB_NAME="drupal"
 DB_USER="drupaluser"
@@ -51,6 +51,7 @@ else
     -e MYSQL_DATABASE="${DB_NAME}" \
     -e MYSQL_USER="${DB_USER}" \
     -e MYSQL_PASSWORD="${DB_PASS}" \
+    -p 3306:3306 \
     -v db_data:/var/lib/mysql \
     "${DB_IMAGE}"
   echo "✅ Container ${DB_CONTAINER} is up."
