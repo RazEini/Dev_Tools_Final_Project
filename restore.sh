@@ -9,7 +9,7 @@ set -e
 NETWORK_NAME="drupal-net"
 
 DB_CONTAINER="drupal-db"
-DB_IMAGE="mysql:8.0"
+DB_IMAGE="mysql:latest"
 DB_ROOT_PASSWORD="my-secret-pw"
 DB_NAME="drupal"
 DB_USER="drupaluser"
@@ -117,13 +117,10 @@ echo "==> Restoring Volume files..."
 for vol_suffix in "${VOLUMES[@]}"; do
   vol_backup="${BACKUP_DIR}/volumes/${vol_suffix}.tar.gz"
   
-  # Dynamic resolution to catch directory/compose prefixes automatically
-  ACTUAL_VOL=$(docker volume ls --format '{{.Name}}' | grep -E "(^|_)${vol_suffix}$" | head -n 1)
-  
-  if [ -z "${ACTUAL_VOL}" ]; then
-    ACTUAL_VOL="${vol_suffix}"
-    docker volume create "${ACTUAL_VOL}" >/dev/null
-  fi
+  # Exact volume name (same name setup.sh creates) - never match by suffix,
+  # so volumes of other projects can never be touched or wiped.
+  ACTUAL_VOL="${vol_suffix}"
+  docker volume create "${ACTUAL_VOL}" >/dev/null
 
   if [ -f "${vol_backup}" ]; then
     echo "    - Restoring to: ${ACTUAL_VOL}"
