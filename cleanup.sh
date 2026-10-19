@@ -7,7 +7,7 @@ set -e
 NETWORK_NAME="drupal-net"
 DB_CONTAINER="drupal-db"
 DRUPAL_CONTAINER="drupal-web"
-DB_IMAGE="mysql:8.0"
+DB_IMAGE="mysql:latest"
 DRUPAL_IMAGE="drupal:latest"
 VOLUMES=("db_data" "drupal_modules" "drupal_profiles" "drupal_themes" "drupal_sites")
 
@@ -26,16 +26,13 @@ docker rm -f "${DRUPAL_CONTAINER}" >/dev/null 2>&1 && echo "    - ${DRUPAL_CONTA
 docker rm -f "${DB_CONTAINER}" >/dev/null 2>&1 && echo "    - ${DB_CONTAINER} removed" || echo "    - ${DB_CONTAINER} not found"
 
 echo "==> Removing volumes..."
-for vol_suffix in "${VOLUMES[@]}"; do
-  # Find exact volume name matching the suffix or prefixed name
-  MATCHING_VOLS=$(docker volume ls --format '{{.Name}}' | grep -E "(^|_)${vol_suffix}$" || true)
-  
-  if [ -n "${MATCHING_VOLS}" ]; then
-    for vol in ${MATCHING_VOLS}; do
-      docker volume rm "${vol}" >/dev/null 2>&1 && echo "    - Volume ${vol} removed" || echo "    - Failed to remove volume ${vol}"
-    done
+for vol in "${VOLUMES[@]}"; do
+  # Exact names only (the ones setup.sh creates) - no suffix/pattern matching,
+  # so volumes that belong to other projects are never removed.
+  if docker volume inspect "${vol}" >/dev/null 2>&1; then
+    docker volume rm "${vol}" >/dev/null 2>&1 && echo "    - Volume ${vol} removed" || echo "    - Failed to remove volume ${vol}"
   else
-    echo "    - Volume ${vol_suffix} not found"
+    echo "    - Volume ${vol} not found"
   fi
 done
 
